@@ -1,0 +1,9 @@
+{
+  "generator-node": {
+    "promptValues": {
+      "authorName": "Cristiano Almeida",
+      "authorEmail": "cs.almeida@protonmail.ch",
+      "authorUrl": "https://www.csalmeida.com"
+    }
+  }
+}
