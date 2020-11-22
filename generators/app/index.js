@@ -38,14 +38,16 @@ module.exports = class extends Generator {
     return this.prompt(prompts).then(props => {
       // To access props later use this.props.someAnswer;
       this.props = props;
+      this.props.projectFolderName = this._dashify(this.props.projectName);
     });
   }
 
   writing() {
-
     // Installs Wordpress
     if (this.props.installWordpress) {
-      this._installWordpress(this.props.projectName);
+      this._installWordpress(
+        this._dashify(this.props.projectFolderName)
+      );
     }
 
     // this.fs.copyTpl(
@@ -112,26 +114,6 @@ module.exports = class extends Generator {
   }
 
   /**
-   * It creates the project directory if one is not already in place.
-   * It is useful when running generators separately that 
-   * require the project root folder to be in place before a task is performed.
-   * @param {String} projectName Name of the project, used to name root folder. e.g 'hozokit' or this.props.projectName
-  */
-  _createProjectDirectory(projectName) {
-    const directory = `./${projectName}`;
-    try {
-      if (!fs.existsSync(directory)) {
-          fs.mkdirSync(directory);
-          // this.log("Created temporary directory.");
-      } else {
-        // this.log("Temporary directory already exists, moving on.");
-      }
-    } catch (err) {
-        this.log(err);
-    }
-  }
-
-  /**
    * Extracts Wordpress.zip into /wordpress
    * Copies contents of /wordpress into project folder.
    * Removes /wordpress and wordpress.zip when done.
@@ -195,6 +177,39 @@ module.exports = class extends Generator {
         }
       })
     });
+  }
+
+  /**
+   * It creates the project directory if one is not already in place.
+   * It is useful when running generators separately that 
+   * require the project root folder to be in place before a task is performed.
+   * @param {String} projectName Name of the project, used to name root folder. e.g 'hozokit' or this.props.projectName
+  */
+  _createProjectDirectory(projectName) {
+    const directory = `./${projectName}`;
+    try {
+      if (!fs.existsSync(directory)) {
+          fs.mkdirSync(directory);
+          // this.log("Created temporary directory.");
+      } else {
+        // this.log("Temporary directory already exists, moving on.");
+      }
+    } catch (err) {
+        this.log(err);
+    }
+  }
+
+  /**
+   * It transforms a string separated by spaces into a dash separated one.
+   * For example Hozokit Generator Project will be converted to hozokit-generator-project.
+   * This is useful to create project directories for users without prompting them for the project folder name.
+   * @param {String} value The value to be dashified. e.g 'Hozokit Generator Project'
+   * @param {String} target (optional) The string that will be replaced with the separator. The default is a space ' '.
+   * @param {String} separator (optional) The string the target value should be replaced with. The default is a dash '-'.
+  */
+  _dashify(value, target = ' ', separator = '-') {
+    const lowerCaseValue = value.toLowerCase();
+    return lowerCaseValue.split(target).join(separator);
   }
 
   // install() {
