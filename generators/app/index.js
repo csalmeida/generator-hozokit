@@ -42,13 +42,13 @@ module.exports = class extends Generator {
   }
 
   writing() {
-    // Installs Wordpress
+    // Installs Wordpress and Hozokit
     if (this.props.installWordpress) {
       this._installWordpress(this._dashify(this.props.projectFolderName));
+    } else {
+      // Installs Hozokit
+      this._installHozokit(this._dashify(this.props.projectFolderName));
     }
-
-    // Installs Hozokit
-    this._installHozokit(this._dashify(this.props.projectFolderName));
 
     // This.fs.copyTpl(
     //   this.templatePath('dummyfile.txt'),
@@ -107,6 +107,8 @@ module.exports = class extends Generator {
         `./${projectName}/`,
         "Extracting Wordpress"
       );
+
+      this._installHozokit(this._dashify(this.props.projectFolderName));
     }).on("err", error => {
       if (downloadError) {
         this.log(`${chalk.red("Error:")} ${downloadError}`);
