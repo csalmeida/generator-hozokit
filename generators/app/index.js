@@ -139,8 +139,10 @@ module.exports = class extends Generator {
       // Creates the project directory if one is not already in place.
       this._createProjectDirectory(projectName);
 
+      // Starts loading spinners in the terminal. Allows user to measure progress of process.
       const spinners = ["Downloading Wordpress"];
       const m = new Multispinner(spinners);
+
       // Downloads a zipped copy of Wordpress into the folder.
       const zipPath = `./${projectName}/wordpress.zip`;
       const file = fs.createWriteStream(zipPath);
@@ -419,6 +421,11 @@ module.exports = class extends Generator {
    * Generates code from templates, using user input.
    */
   _generateFromTemplates() {
+    // Starts loading spinners in the terminal. Allows user to measure progress of process.
+    const spinners = ["Setup Hozokit base files with given parameters"];
+    const m = new Multispinner(spinners);
+
+    // Used to store an error message in case something goes wrong.
     let templateError = null;
 
     // Rename the directory to match the project name.
@@ -505,8 +512,11 @@ module.exports = class extends Generator {
     }
 
     // Temporary error logging.
-    if (templateError !== null) {
+    if (templateError === null) {
+      m.success(spinners[0]);
+    } else {
       this.log(`${chalk.red("Error:")} ${templateError}`);
+      m.error(spinners[0]);
     }
   }
 
