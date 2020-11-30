@@ -1,6 +1,14 @@
 # generator-hozokit [![NPM version][npm-image]][npm-url] [![Build Status][travis-image]][travis-url] [![Dependency Status][daviddm-image]][daviddm-url] [![Coverage percentage][coveralls-image]][coveralls-url]
 > Generates a Hozokit theme to use with Wordpress.
 
+This generator can be used to scaffold a Wordpress Theme project using [Hozokit](https://github.com/csalmeida/hozokit) after asking a few questions about the theme.
+
+The `hozokit:app` generator can:
+
+- Download and install the latest release of Wordpress.
+- Download and install the latest release of Hozokit in the themes folder with your chosen project name.
+- Generates a theme header and README using the given parameters.
+
 ## Installation
 
 First, install [Yeoman](http://yeoman.io) and generator-hozokit using [npm](https://www.npmjs.com/) (we assume you have pre-installed [node.js](https://nodejs.org/)).
