@@ -1,6 +1,6 @@
 {
   "name": "generator-hozokit",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Generates a Hozokit theme to use with Wordpress.",
   "homepage": "https://github.com/csalmeida/hozokit",
   "author": {
@@ -80,6 +80,9 @@
     "pretest": "eslint .",
     "test": "jest"
   },
-  "repository": "csalmeida/generator-hozokit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/csalmeida/generator-hozokit.git"
+  },
   "license": "GPL-3.0"
 }
