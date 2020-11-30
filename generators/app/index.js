@@ -24,20 +24,50 @@ module.exports = class extends Generator {
         type: "input",
         name: "projectName",
         message: "What is your project name?",
-        default: "hozokit" // Default to current folder name
+        default: "Hozokit" // Default to current folder name
       },
       {
         type: "confirm",
         name: "installWordpress",
         message: "Would you like Wordpress to be installed?",
         default: true
+      },
+      {
+        type: "input",
+        name: "themeUri",
+        message: "Theme URI (a repository, a demo or showcase page):",
+        default: "https://github.com/csalmeida/hozokit"
+      },
+      {
+        type: "input",
+        name: "themeDescription",
+        message: "Theme description:"
+      },
+      {
+        type: "input",
+        name: "themeAuthor",
+        message: "Theme author (name or company):"
+      },
+      {
+        type: "input",
+        name: "themeAuthorUri",
+        message: "Theme author URI (name or company):"
+      },
+      {
+        type: "input",
+        name: "themeTags",
+        message:
+          "Any additional tags? (separated by a comma, useful if the theme is going to be published to wordpress.org):"
       }
     ];
 
     return this.prompt(prompts).then(props => {
       // To access props later use this.props.someAnswer;
       this.props = props;
+      // Makes the project folder name available to templates.
       this.props.projectFolderName = this._dashify(this.props.projectName);
+      // Prepares additional tags to be appended to base.scss.
+      this.props.themeTags = `, ${this.props.themeTags}`;
     });
   }
 
@@ -47,14 +77,9 @@ module.exports = class extends Generator {
       this._installWordpress(this._dashify(this.props.projectFolderName));
     } else {
       // Installs Hozokit
+      // Templates are generated in this method as well.
       this._installHozokit(this._dashify(this.props.projectFolderName));
     }
-
-    // This.fs.copyTpl(
-    //   this.templatePath('dummyfile.txt'),
-    //   this.destinationPath('dummyfile.txt'),
-    //   { projectName: this.props.projectName }
-    // );
   }
 
   /**
@@ -292,6 +317,9 @@ module.exports = class extends Generator {
             `;
             m.error(spinners[0]);
           }
+
+          // Generate templates
+          this._generateFromTemplates();
         }
 
         // If no error has been set, mark as successful.
@@ -341,6 +369,103 @@ module.exports = class extends Generator {
         );
       }
     });
+  }
+
+  /**
+   * Generates code from templates, using user input.
+   */
+  _generateFromTemplates() {
+    let templateError = null;
+
+    // Rename the directory to match the project name.
+    const oldDirName = `./${this.props.projectFolderName}/wp-content/themes/hozokit`;
+    const newDirName = `./${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}`;
+
+    // Check if the hozokit theme folder exists.
+    if (fs.existsSync(oldDirName)) {
+      try {
+        fs.renameSync(oldDirName, newDirName);
+      } catch (error) {
+        templateError = `
+        Could not rename theme folder to match project name (${this.props.projectFolderName}). \n
+        ./${error}
+        `;
+      }
+    }
+
+    // The props template files will use.
+    var templateProps = { ...this.props, nodeVersion: "13.0.1" };
+
+    // If a folder with the project name exists, create the templates.
+    // This prevents a separate folder to be created in cases where it doesn't exist.
+    if (fs.existsSync(newDirName)) {
+      // Retrieves the Node version of Hozokit and uses it in the README file.
+      const nvmrcPath = `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.nvmrc`;
+      if (fs.existsSync(nvmrcPath)) {
+        const data = fs.readFileSync(nvmrcPath, "utf8", function(error, data) {
+          if (error) {
+            templateError = `
+            Could not read ./${nvmrcPath}. \n
+            ./${error}
+            `;
+          } else {
+            return data;
+          }
+        });
+
+        if (data !== null) {
+          templateProps.nodeVersion = data.substring(1);
+        }
+      }
+
+      console.log(templateProps);
+
+      const filePath = {
+        baseStyles: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/styles/base.scss`,
+        readme: `${this.props.projectFolderName}/README.md`
+      };
+
+      // Adds a customized base.scss which defines theme information.
+      try {
+        fs.unlinkSync(filePath.baseStyles);
+
+        this.fs.copyTpl(
+          this.templatePath("theme/base.scss"),
+          this.destinationPath(filePath.baseStyles),
+          { ...templateProps }
+        );
+      } catch (error) {
+        templateError = `
+        Could not remove ./${filePath.baseStyles}. \n
+        ./${error}
+        `;
+      }
+
+      // Rename the README file and make use of template to generate one for the project.
+      // Rename the directory to match the project name.
+      const oldReadmeName = `./${this.props.projectFolderName}/README.md`;
+      const newReadmeName = `./${this.props.projectFolderName}/HOZOKIT-README.md`;
+
+      try {
+        fs.renameSync(oldReadmeName, newReadmeName);
+
+        this.fs.copyTpl(
+          this.templatePath("theme/README.md"),
+          this.destinationPath(filePath.readme),
+          { ...templateProps }
+        );
+      } catch (error) {
+        templateError = `
+        Could not rename theme README file. \n
+        ./${error}
+        `;
+      }
+    }
+
+    // Temporary error logging.
+    if (templateError !== null) {
+      console.error(templateError);
+    }
   }
 
   /**
