@@ -74,11 +74,58 @@ module.exports = class extends Generator {
   writing() {
     // Installs Wordpress and Hozokit
     if (this.props.installWordpress) {
-      this._installWordpress(this._dashify(this.props.projectFolderName));
+      this._installWordpress(this._dashify(this.props.projectFolderName))
+        .then(projectName => {
+          return this._extractZip(
+            projectName,
+            "wordpress.zip",
+            `./${projectName}/`,
+            "Extracting Wordpress"
+          );
+        })
+        .then(() => {
+          return this._installHozokit(
+            this._dashify(this.props.projectFolderName)
+          );
+        })
+        .then(promiseData => {
+          const { projectName, hozokit } = promiseData;
+
+          return this._extractZip(
+            projectName,
+            "hozokit-main.zip",
+            `./${projectName}/`,
+            `Extracting Hozokit ${hozokit.name}`
+          );
+        })
+        .then(() => {
+          this._generateFromTemplates();
+        })
+        .catch(error => {
+          this.log(`${chalk.red("Error:")} Could not generate Hozokit config.`);
+          this.log(error);
+        });
     } else {
       // Installs Hozokit
       // Templates are generated in this method as well.
-      this._installHozokit(this._dashify(this.props.projectFolderName));
+      this._installHozokit(this._dashify(this.props.projectFolderName))
+        .then(promiseData => {
+          const { projectName, hozokit } = promiseData;
+
+          return this._extractZip(
+            projectName,
+            "hozokit-main.zip",
+            `./${projectName}/`,
+            `Extracting Hozokit ${hozokit.name}`
+          );
+        })
+        .then(() => {
+          this._generateFromTemplates();
+        })
+        .catch(error => {
+          this.log(`${chalk.red("Error:")} Could not generate Hozokit config.`);
+          this.log(error);
+        });
     }
   }
 
@@ -88,62 +135,55 @@ module.exports = class extends Generator {
    * @param {String} projectName Name of the project, used to name root folder. e.g 'hozokit' or this.props.projectName
    */
   _installWordpress(projectName) {
-    // Creates the project directory if one is not already in place.
-    this._createProjectDirectory(projectName);
+    return new Promise((resolve, reject) => {
+      // Creates the project directory if one is not already in place.
+      this._createProjectDirectory(projectName);
 
-    const spinners = ["Downloading Wordpress"];
-    const m = new Multispinner(spinners);
-    // Downloads a zipped copy of Wordpress into the folder.
-    const zipPath = `./${projectName}/wordpress.zip`;
-    const file = fs.createWriteStream(zipPath);
-    const downloadURL = "https://wordpress.org/latest.zip";
+      const spinners = ["Downloading Wordpress"];
+      const m = new Multispinner(spinners);
+      // Downloads a zipped copy of Wordpress into the folder.
+      const zipPath = `./${projectName}/wordpress.zip`;
+      const file = fs.createWriteStream(zipPath);
+      const downloadURL = "https://wordpress.org/latest.zip";
 
-    // This message is shown later to the user if any issues with the download come up.
-    let downloadError = null;
-    https
-      .get(downloadURL, function(response) {
-        response.pipe(file);
+      // This message is shown later to the user if any issues with the download come up.
+      let downloadError = null;
+      https
+        .get(downloadURL, function(response) {
+          response.pipe(file);
 
-        // Use to add logic for when a request is in progress.
-        // response.on('data', (data) => {
-        // });
-
-        response.on("end", () => {
-          if (response.statusCode === 200) {
-            m.success(spinners[0]);
-          } else {
-            downloadError = `Download has failed. (${response.statusCode})`;
-            m.error(spinners[0]);
-          }
+          response.on("end", () => {
+            if (response.statusCode === 200) {
+              m.success(spinners[0]);
+            } else {
+              downloadError = `Download has failed. (${response.statusCode})`;
+              m.error(spinners[0]);
+            }
+          });
+        })
+        .on("error", error => {
+          downloadError = error;
+          m.error(spinners[0]);
         });
-      })
-      .on("error", error => {
-        downloadError = error;
-        m.error(spinners[0]);
+
+      // Displays a message once download is complete.
+      // Alerts that promise has resolved to allow other action to run.
+      m.on("success", () => {
+        // Returns the projectName in order to pass it to extraction.
+        resolve(projectName);
+      }).on("err", error => {
+        if (downloadError) {
+          this.log(`${chalk.red("Error:")} ${downloadError}`);
+        } else {
+          this.log(
+            `${chalk.red(
+              "Error:"
+            )} ${error} Download has been cancelled with an unknown error.`
+          );
+        }
+
+        reject(error);
       });
-
-    // Displays a message once download is complete.
-    m.on("success", () => {
-      // This.log(`${chalk.green('Success:')} Download of Wordpress has completed.`);
-      // this._extractWordpress(projectName)
-      this._extractZip(
-        projectName,
-        "wordpress.zip",
-        `./${projectName}/`,
-        "Extracting Wordpress"
-      );
-
-      this._installHozokit(this._dashify(this.props.projectFolderName));
-    }).on("err", error => {
-      if (downloadError) {
-        this.log(`${chalk.red("Error:")} ${downloadError}`);
-      } else {
-        this.log(
-          `${chalk.red(
-            "Error:"
-          )} ${error} Download has been cancelled with an unknown error.`
-        );
-      }
     });
   }
 
@@ -152,110 +192,112 @@ module.exports = class extends Generator {
    * @param {String} projectName Name of the project, used to name root folder. e.g 'hozokit' or this.props.projectName
    */
   _installHozokit(projectName) {
-    // Creates the project directory if one is not already in place.
-    this._createProjectDirectory(projectName);
+    return new Promise((resolve, reject) => {
+      // Creates the project directory if one is not already in place.
+      this._createProjectDirectory(projectName);
 
-    // Generates progress spinners for user to see on the terminal.
-    const spinners = [
-      "Looking up latest Hozokit release",
-      "Downloading Hozokit"
-    ];
-    const m = new Multispinner(spinners);
+      // Generates progress spinners for user to see on the terminal.
+      const spinners = [
+        "Looking up latest Hozokit release",
+        "Downloading Hozokit"
+      ];
+      const m = new Multispinner(spinners);
 
-    // Downloads a zipped copy of Wordpress into the folder.
-    const zipPath = `./${projectName}/hozokit-main.zip`;
-    const file = fs.createWriteStream(zipPath);
-    // Getting data on the URL is necessary to be passed into the request options.
-    const releaseUrl = new URL(
-      "https://api.github.com/repos/csalmeida/hozokit/releases/latest"
-    );
-    // Data on the latest hozokit release.
-    let hozokit = null;
-
-    // This message is shown later to the user if any issues with the download come up.
-    let downloadError = null;
-
-    // Retrieves information on the latest available release of Hozokit.
-    // User-Agent is required for GitHub to take request.
-    const options = {
-      host: releaseUrl.host,
-      path: releaseUrl.pathname,
-      headers: {
-        "User-Agent": "Hozokit Generator v0.0"
-      }
-    };
-
-    https
-      .get(options, function(response) {
-        // Stores the response body for later use.
-        let body = "";
-        response.on("data", function(chunk) {
-          body += chunk;
-        });
-
-        response.on("end", () => {
-          if (response.statusCode === 200) {
-            hozokit = JSON.parse(body);
-            m.success(spinners[0]);
-
-            if (hozokit) {
-              const downloadUrl = new URL(hozokit.zipball_url);
-              let options = {
-                host: downloadUrl.host,
-                path: downloadUrl.pathname,
-                headers: {
-                  "User-Agent": "Hozokit Generator v0.0"
-                }
-              };
-
-              // Downloads the zip file of the latest release from Github.
-              https
-                .get(options, function(response) {
-                  response.pipe(file);
-
-                  response.on("end", () => {
-                    if (response.statusCode === 200) {
-                      m.success(spinners[1]);
-                    } else {
-                      downloadError = `Download has failed. (${response.statusCode})`;
-                      m.error(spinners[1]);
-                    }
-                  });
-                })
-                .on("error", error => {
-                  downloadError = error;
-                  m.error(spinners[1]);
-                });
-            }
-          } else {
-            downloadError = `Request has failed. (${response.statusCode})`;
-            m.error(spinners[0]);
-          }
-        });
-      })
-      .on("error", error => {
-        downloadError = error;
-        m.error(spinners[0]);
-      });
-
-    // Displays a message once download is complete.
-    m.on("success", () => {
-      this._extractZip(
-        projectName,
-        "hozokit-main.zip",
-        `./${projectName}/`,
-        `Extracting Hozokit ${hozokit.name}`
+      // Downloads a zipped copy of Wordpress into the folder.
+      const zipPath = `./${projectName}/hozokit-main.zip`;
+      const file = fs.createWriteStream(zipPath);
+      // Getting data on the URL is necessary to be passed into the request options.
+      const releaseUrl = new URL(
+        "https://api.github.com/repos/csalmeida/hozokit/releases/latest"
       );
-    }).on("err", error => {
-      if (downloadError) {
-        this.log(`${chalk.red("Error:")} ${downloadError}`);
-      } else {
-        this.log(
-          `${chalk.red(
-            "Error:"
-          )} ${error} Download has been cancelled with an unknown error.`
-        );
-      }
+      // Data on the latest hozokit release.
+      let hozokit = null;
+
+      // This message is shown later to the user if any issues with the download come up.
+      let downloadError = null;
+
+      // Retrieves information on the latest available release of Hozokit.
+      // User-Agent is required for GitHub to take request.
+      const options = {
+        host: releaseUrl.host,
+        path: releaseUrl.pathname,
+        headers: {
+          "User-Agent": "Hozokit Generator v0.0"
+        }
+      };
+
+      https
+        .get(options, function(response) {
+          // Stores the response body for later use.
+          let body = "";
+          response.on("data", function(chunk) {
+            body += chunk;
+          });
+
+          response.on("end", () => {
+            if (response.statusCode === 200) {
+              hozokit = JSON.parse(body);
+              m.success(spinners[0]);
+
+              if (hozokit) {
+                const downloadUrl = new URL(hozokit.zipball_url);
+                let options = {
+                  host: downloadUrl.host,
+                  path: downloadUrl.pathname,
+                  headers: {
+                    "User-Agent": "Hozokit Generator v0.0"
+                  }
+                };
+
+                // Downloads the zip file of the latest release from Github.
+                https
+                  .get(options, function(response) {
+                    response.pipe(file);
+
+                    response.on("end", () => {
+                      if (response.statusCode === 200) {
+                        m.success(spinners[1]);
+                      } else {
+                        downloadError = `Download has failed. (${response.statusCode})`;
+                        m.error(spinners[1]);
+                      }
+                    });
+                  })
+                  .on("error", error => {
+                    downloadError = error;
+                    m.error(spinners[1]);
+                  });
+              }
+            } else {
+              downloadError = `Request has failed. (${response.statusCode})`;
+              m.error(spinners[0]);
+            }
+          });
+        })
+        .on("error", error => {
+          downloadError = error;
+          m.error(spinners[0]);
+        });
+
+      // Displays a message once download is complete.
+      // Alerts that promise has resolved to allow other actions to run.
+      m.on("success", () => {
+        // Returns the projectName in order to pass it to extraction.
+        const promiseData = { projectName, hozokit };
+        resolve(promiseData);
+      }).on("err", error => {
+        if (downloadError) {
+          this.log(`${chalk.red("Error:")} ${downloadError}`);
+        } else {
+          this.log(
+            `${chalk.red(
+              "Error:"
+            )} ${error} Download has been cancelled with an unknown error.`
+          );
+        }
+
+        reject(error);
+      });
     });
   }
 
@@ -274,100 +316,102 @@ module.exports = class extends Generator {
     copyPath = null,
     spinnerText = "Extracting"
   ) {
-    const spinners = [spinnerText];
-    const m = new Multispinner(spinners);
+    return new Promise((resolve, reject) => {
+      const spinners = [spinnerText];
+      const m = new Multispinner(spinners);
 
-    // Extracts contents of Wordpress.
-    const extractPath = `./${projectName}/${fileZipName}`;
-    const zip = new AdmZip(extractPath);
-    // Makes use of the entries to figure out which folder name was created when file was extracted.
-    const zipEntries = zip.getEntries();
-    const extractedFolder = `./${projectName}/${zipEntries[0].entryName}`;
-    zip.extractAllTo(`${projectName}/`, true);
+      // Extracts contents of Wordpress.
+      const extractPath = `./${projectName}/${fileZipName}`;
+      const zip = new AdmZip(extractPath);
+      // Makes use of the entries to figure out which folder name was created when file was extracted.
+      const zipEntries = zip.getEntries();
+      const extractedFolder = `./${projectName}/${zipEntries[0].entryName}`;
+      zip.extractAllTo(`${projectName}/`, true);
 
-    let extractError = null;
+      let extractError = null;
 
-    // If a copy path is not provided files won't be moved.
-    if (copyPath) {
-      fse.copy(extractedFolder, copyPath, { overwrite: true }, err => {
-        if (err) {
-          extractError = `
-          Could not copy files to ./${copyPath}. \n
-          ./${err}
-          `;
-        } else {
-          // Cleans up by removing extracted folder and zip.
-          try {
-            fs.rmdirSync(extractedFolder, { recursive: true });
-          } catch (err) {
+      // If a copy path is not provided files won't be moved.
+      if (copyPath) {
+        fse.copy(extractedFolder, copyPath, { overwrite: true }, err => {
+          if (err) {
             extractError = `
-              Could not remove extractedFolder. \n
-              ./${err}
-              `;
-            m.error(spinners[0]);
-          }
-
-          // Remove zip file as it is not longer needed.
-          try {
-            fs.unlinkSync(extractPath);
-          } catch (error) {
-            extractError = `
-            Could not remove ./${extractPath}. \n
-            ./${error}
+            Could not copy files to ./${copyPath}. \n
+            ./${err}
             `;
-            m.error(spinners[0]);
+          } else {
+            // Cleans up by removing extracted folder and zip.
+            try {
+              fs.rmdirSync(extractedFolder, { recursive: true });
+            } catch (err) {
+              extractError = `
+                Could not remove extractedFolder. \n
+                ./${err}
+                `;
+              m.error(spinners[0]);
+            }
+
+            // Remove zip file as it is not longer needed.
+            try {
+              fs.unlinkSync(extractPath);
+            } catch (error) {
+              extractError = `
+              Could not remove ./${extractPath}. \n
+              ./${error}
+              `;
+              m.error(spinners[0]);
+            }
           }
 
-          // Generate templates
-          this._generateFromTemplates();
-        }
-
-        // If no error has been set, mark as successful.
-        if (extractError === null) {
-          m.success(spinners[0]);
-        }
-      });
-    } else {
-      // Cleans up by removing extracted folder and zip.
-      // Lets user know that program did not work as intended.
-      try {
-        fs.rmdirSync(extractedFolder, { recursive: true });
-      } catch (err) {
-        extractError = `
-          Could not remove extractedFolder. \n
-          ./${err}
-          `;
-        m.error(spinners[0]);
-      }
-
-      // Remove zip file as it is not longer needed.
-      try {
-        fs.unlinkSync(extractPath);
-      } catch (error) {
-        extractError = `
-        Could not remove ./${extractPath}. \n
-        ./${error}
-        `;
-        m.error(spinners[0]);
-      }
-
-      this.log(`${chalk.red(
-        "Error:"
-      )} Could not copy files (copyPath is not present).
-      Zip file and extracted files were removed.`);
-    }
-
-    // Displays error messages once extract is complete.
-    m.on("err", error => {
-      if (extractError) {
-        this.log(`${chalk.red("Error:")} ${extractError}`);
+          // If no error has been set, mark as successful.
+          if (extractError === null) {
+            m.success(spinners[0]);
+            resolve();
+          }
+        });
       } else {
-        this.log(
-          `${chalk.red(
-            "Error:"
-          )} ${error} Extract has been stopped with an unknown error.`
-        );
+        // Cleans up by removing extracted folder and zip.
+        // Lets user know that program did not work as intended.
+        try {
+          fs.rmdirSync(extractedFolder, { recursive: true });
+        } catch (err) {
+          extractError = `
+            Could not remove extractedFolder. \n
+            ./${err}
+            `;
+          m.error(spinners[0]);
+        }
+
+        // Remove zip file as it is not longer needed.
+        try {
+          fs.unlinkSync(extractPath);
+        } catch (error) {
+          extractError = `
+          Could not remove ./${extractPath}. \n
+          ./${error}
+          `;
+          m.error(spinners[0]);
+        }
+
+        this.log(`${chalk.red(
+          "Error:"
+        )} Could not copy files (copyPath is not present).
+        Zip file and extracted files were removed.`);
       }
+
+      // Displays error messages once extract is complete.
+      m.on("err", error => {
+        if (extractError) {
+          this.log(`${chalk.red("Error:")} ${extractError}`);
+        } else {
+          this.log(
+            `${chalk.red(
+              "Error:"
+            )} ${error} Extract has been stopped with an unknown error.`
+          );
+        }
+
+        reject(error);
+      });
     });
   }
 
@@ -418,8 +462,6 @@ module.exports = class extends Generator {
         }
       }
 
-      console.log(templateProps);
-
       const filePath = {
         baseStyles: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/styles/base.scss`,
         readme: `${this.props.projectFolderName}/README.md`
@@ -464,7 +506,7 @@ module.exports = class extends Generator {
 
     // Temporary error logging.
     if (templateError !== null) {
-      console.error(templateError);
+      this.log(`${chalk.red("Error:")} ${templateError}`);
     }
   }
 
