@@ -17,13 +17,15 @@ const Multispinner = require("multispinner");
 module.exports = class extends Generator {
   prompting() {
     // Have Yeoman greet the user.
-    this.log(yosay(`The ${chalk.blue("hozokit")} theme generator.`));
+    this.log(
+      yosay(`The ${chalk.blue("Hozokit")} theme generator for Wordpress.`)
+    );
 
     const prompts = [
       {
         type: "input",
         name: "projectName",
-        message: "What is your project name?",
+        message: "What is your project name? (e.g My Hozokit Project)",
         default: "Hozokit" // Default to current folder name
       },
       {
