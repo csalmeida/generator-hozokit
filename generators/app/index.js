@@ -21,7 +21,7 @@ module.exports = class extends Generator {
       yosay(`The ${chalk.blue("Hozokit")} theme generator for Wordpress.`)
     );
 
-    // Saves user project settings so that they're used as defaults in the future.
+    // Retrieves previous user choices of project settings.
     const projectSettings = this.config.get("projectSettings")
       ? this.config.get("projectSettings")
       : null;
@@ -119,7 +119,7 @@ module.exports = class extends Generator {
       // Prepares additional tags to be appended to base.scss.
       this.props.themeTags = `, ${this.props.themeTags}`;
 
-      // Saves user configuration.
+      // Saves user configuration so that they're used as defaults in the future.
       this.config.set("projectSettings", this.props);
     });
   }
