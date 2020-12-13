@@ -21,51 +21,93 @@ module.exports = class extends Generator {
       yosay(`The ${chalk.blue("Hozokit")} theme generator for Wordpress.`)
     );
 
+    // Saves user project settings so that they're used as defaults in the future.
+    const projectSettings = this.config.get("projectSettings")
+      ? this.config.get("projectSettings")
+      : null;
+
     const prompts = [
       {
         type: "input",
         name: "projectName",
         message: "What is your project name? (e.g My Hozokit Project)",
-        default: "Hozokit" // Default to current folder name
+        default:
+          projectSettings !== null &&
+          typeof projectSettings.projectName !== "undefined"
+            ? projectSettings.projectName
+            : "Hozokit" // Default to current folder name
       },
       {
         type: "confirm",
         name: "installWordpress",
         message: "Would you like Wordpress to be installed?",
-        default: true
+        default:
+          projectSettings !== null &&
+          typeof projectSettings.installWordpress !== "undefined"
+            ? projectSettings.installWordpress
+            : true
       },
       {
         type: "input",
         name: "webserverURL",
         message: `What's the address of the webserver for this install? e.g http://localhost:3000:
-(This is used to setup hot reloading. If you don't know or wouldn't like to use this feature, leave blank.)`
+(This is used to setup hot reloading. If you don't know or wouldn't like to use this feature, leave blank.)`,
+        default:
+          projectSettings !== null &&
+          typeof projectSettings.webserverURL !== "undefined"
+            ? projectSettings.webserverURL
+            : null
       },
       {
         type: "input",
         name: "themeUri",
         message: "Theme URI (a repository, a demo or showcase page):",
-        default: "https://github.com/csalmeida/hozokit"
+        default:
+          projectSettings !== null &&
+          typeof projectSettings.themeUri !== "undefined"
+            ? projectSettings.themeUri
+            : "https://github.com/csalmeida/hozokit"
       },
       {
         type: "input",
         name: "themeDescription",
-        message: "Theme description:"
+        message: "Theme description:",
+        default:
+          projectSettings !== null &&
+          typeof projectSettings.themeDescription !== "undefined"
+            ? projectSettings.themeDescription
+            : null
       },
       {
         type: "input",
         name: "themeAuthor",
-        message: "Theme author (name or company):"
+        message: "Theme author (name or company):",
+        default:
+          projectSettings !== null &&
+          typeof projectSettings.themeAuthor !== "undefined"
+            ? projectSettings.themeAuthor
+            : null
       },
       {
         type: "input",
         name: "themeAuthorUri",
-        message: "Theme author URI (name or company):"
+        message: "Theme author URI (name or company):",
+        default:
+          projectSettings !== null &&
+          typeof projectSettings.themeAuthorUri !== "undefined"
+            ? projectSettings.themeAuthorUri
+            : null
       },
       {
         type: "input",
         name: "themeTags",
         message:
-          "Any additional tags? (separated by a comma, useful if the theme is going to be published to wordpress.org):"
+          "Any additional tags? (separated by a comma, useful if the theme is going to be published to wordpress.org):",
+        default:
+          projectSettings !== null &&
+          typeof projectSettings.themeTags !== "undefined"
+            ? projectSettings.themeTags
+            : null
       }
     ];
 
@@ -76,6 +118,9 @@ module.exports = class extends Generator {
       this.props.projectFolderName = this._dashify(this.props.projectName);
       // Prepares additional tags to be appended to base.scss.
       this.props.themeTags = `, ${this.props.themeTags}`;
+
+      // Saves user configuration.
+      this.config.set("projectSettings", this.props);
     });
   }
 
