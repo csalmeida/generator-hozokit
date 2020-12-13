@@ -8,6 +8,7 @@ The `hozokit:app` generator can:
 - Download and install the latest release of Wordpress.
 - Download and install the latest release of Hozokit in the themes folder with your chosen project name.
 - Generates a theme header and README using the given parameters.
+- Generates a starter `.env` file.
 
 ## Installation
 

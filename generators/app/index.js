@@ -36,6 +36,12 @@ module.exports = class extends Generator {
       },
       {
         type: "input",
+        name: "webserverURL",
+        message: `What's the address of the webserver for this install? e.g http://localhost:3000:
+(This is used to setup hot reloading. If you don't know or wouldn't like to use this feature, leave blank.)`
+      },
+      {
+        type: "input",
         name: "themeUri",
         message: "Theme URI (a repository, a demo or showcase page):",
         default: "https://github.com/csalmeida/hozokit"
@@ -446,8 +452,15 @@ module.exports = class extends Generator {
       }
     }
 
+    // Makes sure the value of webserver is a valid string. Otherwise it renders it null so the template does not make use of it.
+    var webserverURL =
+      typeof this.props.webserverURL === "string" &&
+      this.props.webserverURL.length > 0
+        ? this.props.webserverURL
+        : null;
+
     // The props template files will use.
-    var templateProps = { ...this.props, nodeVersion: "13.0.1" };
+    var templateProps = { ...this.props, nodeVersion: "13.0.1", webserverURL };
 
     // If a folder with the project name exists, create the templates.
     // This prevents a separate folder to be created in cases where it doesn't exist.
@@ -471,13 +484,16 @@ module.exports = class extends Generator {
         }
       }
 
+      // Paths used in generating files from templates.
       const filePath = {
         baseStyles: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/styles/base.scss`,
+        env: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.env`,
         readme: `${this.props.projectFolderName}/README.md`
       };
 
       // Adds a customized base.scss which defines theme information.
       try {
+        // Removes default base.scss.
         fs.unlinkSync(filePath.baseStyles);
 
         this.fs.copyTpl(
@@ -487,7 +503,21 @@ module.exports = class extends Generator {
         );
       } catch (error) {
         templateError = `
-        Could not remove ./${filePath.baseStyles}. \n
+        Could not create './${filePath.baseStyles}'. \n
+        ./${error}
+        `;
+      }
+
+      // Adds a customized .env.
+      try {
+        this.fs.copyTpl(
+          this.templatePath("theme/.env"),
+          this.destinationPath(filePath.env),
+          { ...templateProps }
+        );
+      } catch (error) {
+        templateError = `
+        Could not create './${filePath.env}'. \n
         ./${error}
         `;
       }
@@ -498,6 +528,7 @@ module.exports = class extends Generator {
       const newReadmeName = `./${this.props.projectFolderName}/HOZOKIT-README.md`;
 
       try {
+        // Renames Hozokit's README.
         fs.renameSync(oldReadmeName, newReadmeName);
 
         this.fs.copyTpl(
