@@ -1,0 +1,11 @@
+{#
+/**
+ * Component: <%= componentName %>
+ * <%= componentDescription %>
+ * @param string classes - (optional) Additional classes can be added.
+ */
+#}
+
+<div class=".<% if (componentClassPrefix) { %> <%= componentClassPrefix %>- <% } %><%= componentNameDashified %> {{<%= componentNameFormatted %>.classes ? " " ~ <%= componentNameFormatted %>.classes}}">
+
+</div>
