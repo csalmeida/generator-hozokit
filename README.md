@@ -1,7 +1,7 @@
 # generator-hozokit [![NPM version][npm-image]][npm-url] [![Build Status][travis-image]][travis-url] [![Dependency Status][daviddm-image]][daviddm-url] [![Coverage percentage][coveralls-image]][coveralls-url]
 > Generates a Hozokit theme to use with Wordpress.
 
-This generator can be used to scaffold a Wordpress Theme project using [Hozokit](https://github.com/csalmeida/hozokit) after asking a few questions about the theme.
+This generator scaffolds a Wordpress site using [Hozokit](https://github.com/csalmeida/hozokit) as a starter theme.
 
 The `hozokit:app` generator can:
 
