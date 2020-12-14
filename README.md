@@ -10,6 +10,10 @@ The `hozokit:app` generator can:
 - Generates a theme header and README using the given parameters.
 - Generates a starter `.env` file.
 
+The `hozokit:component` generator can:
+
+- Generates a twig component with starter syntax if a valid project is found.
+
 ## Installation
 
 First, install [Yeoman](http://yeoman.io) and generator-hozokit using [npm](https://www.npmjs.com/) (we assume you have pre-installed [node.js](https://nodejs.org/)).
