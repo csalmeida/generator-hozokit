@@ -94,50 +94,61 @@ module.exports = class extends Generator {
     }/wp-content/themes/${this.props.projectFolderName}`;
 
     // Checks if the user is in the root directory project directory.
-    try {
-      if (fs.existsSync(projectDirectory)) {
-        // Create component directory, it takes the whole path and appends the directory where the new component should be placed.
-        this._createDirectory(
-          `${projectDirectory}/templates/components/${this.props.componentNameFormatted}`
+    if (fs.existsSync(projectDirectory)) {
+      // Create component directory, it takes the whole path and appends the directory where the new component should be placed.
+      this._createDirectory(
+        `${projectDirectory}/templates/components/${this.props.componentNameFormatted}`
+      );
+
+      // Paths used in generating files from templates.
+      const filePath = {
+        twig: `${projectDirectory}/templates/components/${this.props.componentNameFormatted}/index.twig`,
+        scss: `${projectDirectory}/templates/components/${this.props.componentNameFormatted}/style.scss`
+      };
+
+      // Creating index.twig
+      try {
+        this.fs.copyTpl(
+          this.templatePath("index.twig"),
+          this.destinationPath(filePath.twig),
+          { ...this.props }
         );
-
-        // Paths used in generating files from templates.
-        const filePath = {
-          twig: `${projectDirectory}/templates/components/${this.props.componentNameFormatted}/index.twig`,
-          scss: `${projectDirectory}/templates/components/${this.props.componentNameFormatted}/style.scss`
-        };
-
-        try {
-          this.fs.copyTpl(
-            this.templatePath("index.twig"),
-            this.destinationPath(filePath.twig),
-            { ...this.props }
-          );
-        } catch (error) {
-          this.log(`
-          Could not create '${filePath.twig}'. \n
-          ./${error}
-          `);
-        }
-
-        try {
-          this.fs.copyTpl(
-            this.templatePath("style.scss"),
-            this.destinationPath(filePath.scss),
-            { ...this.props }
-          );
-        } catch (error) {
-          this.log(`
-          Could not create '${filePath.scss}'. \n
-          ./${error}
-          `);
-        }
+      } catch (error) {
+        this.log(`
+        Could not create '${filePath.twig}'. \n
+        ./${error}
+        `);
       }
-    } catch (error) {
+
+      // Creating style.scss
+      try {
+        this.fs.copyTpl(
+          this.templatePath("style.scss"),
+          this.destinationPath(filePath.scss),
+          { ...this.props }
+        );
+      } catch (error) {
+        this.log(`
+        Could not create '${filePath.scss}'. \n
+        ./${error}
+        `);
+      }
+
+      this.log(`${chalk.green(
+        "Component created."
+      )} Include the component on your templates with the following syntax:
+
+      {% include '${this._snakify(this.props.componentName)}/index.twig' with { 
+        props: { 
+          classes: "highlight primary",
+          textExample: "This text can be shown within the component by using {{ props.textExample }}"
+        }
+      } %}
+      `);
+    } else {
       // Throw error
       this.log(`${chalk.red("Error:")} Could not find project directory.
-    Change directory to the folder where Wordpress is installed or the theme folder in order to create a component.`);
-      this.log(error);
+       Change directory to the folder where Wordpress is installed or the theme folder in order to create a component.`);
     }
   }
 
