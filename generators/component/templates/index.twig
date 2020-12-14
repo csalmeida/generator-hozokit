@@ -6,6 +6,6 @@
  */
 #}
 
-<div class=".<% if (componentClassPrefix) { %><%= componentClassPrefix %>-<% } %><%= componentNameDashified %> {{<%= componentNameFormatted %>.classes ? " " ~ <%= componentNameFormatted %>.classes}}">
+<div class=".<% if (componentClassPrefix) { %><%= componentClassPrefix %>-<% } %><%= componentNameDashified %> {{props.classes ? " " ~ props.classes}}">
 
 </div>
