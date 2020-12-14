@@ -29,7 +29,7 @@ module.exports = class extends Generator {
         default:
           componentSettings !== null &&
           typeof componentSettings.componentName !== "undefined"
-            ? this._dashify(componentSettings.componentName)
+            ? componentSettings.componentName
             : "New Component"
       },
       {
@@ -39,7 +39,7 @@ module.exports = class extends Generator {
         default:
           componentSettings !== null &&
           typeof componentSettings.componentDescription !== "undefined"
-            ? this._dashify(componentSettings.componentDescription)
+            ? componentSettings.componentDescription
             : null
       },
       {
