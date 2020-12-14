@@ -16,24 +16,42 @@ module.exports = class extends Generator {
       ? this.config.get("projectSettings")
       : null;
 
+    const componentSettings = this.config.get("componentSettings")
+      ? this.config.get("componentSettings")
+      : null;
+
     const prompts = [
       {
         type: "input",
         name: "componentName",
         message: `Component name (e.g Hero Section):
   The name will be reformatted to reference the component in files and name its folder.`,
-        default: "New Component" // Default to current folder name
+        default:
+          componentSettings !== null &&
+          typeof componentSettings.componentName !== "undefined"
+            ? this._dashify(componentSettings.componentName)
+            : "New Component"
       },
       {
         type: "input",
         name: "componentDescription",
-        message: `Description:`
+        message: `Description:`,
+        default:
+          componentSettings !== null &&
+          typeof componentSettings.componentDescription !== "undefined"
+            ? this._dashify(componentSettings.componentDescription)
+            : null
       },
       {
         type: "input",
         name: "componentClassPrefix",
         message: `Selector class prefix (e.g hoz):
-  Class prefixes tend to be used to better identify components when styling them. Prefix is remembered for next time.`
+  Class prefixes tend to be used to better identify components when styling them. Prefix is remembered for next time.`,
+        default:
+          componentSettings !== null &&
+          typeof componentSettings.componentClassPrefix !== "undefined"
+            ? this._dashify(componentSettings.componentClassPrefix)
+            : null
       },
       {
         type: "input",
@@ -63,6 +81,9 @@ module.exports = class extends Generator {
       this.props.componentClassPrefix = this._snakify(
         this.props.componentClassPrefix
       );
+
+      // Saves user configuration so that they're used as defaults in the future.
+      this.config.set("componentSettings", this.props);
     });
   }
 
