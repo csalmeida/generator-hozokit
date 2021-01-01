@@ -21,6 +21,12 @@ module.exports = class extends Generator {
       yosay(`The ${chalk.blue("Hozokit")} theme generator for Wordpress.`)
     );
 
+    // Initial instructions.
+    this.log(
+      `This generator will create a directory and install Hozokit and, optionally, a copy of Wordpress.`
+    );
+    this.log(`All fields are optional and defaults are shown in brackets.`);
+
     // Retrieves previous user choices of project settings.
     const projectSettings = this.config.get("projectSettings")
       ? this.config.get("projectSettings")
@@ -30,7 +36,9 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "projectName",
-        message: "What is your project name? (e.g My Hozokit Project)",
+        message: `
+  ${chalk.inverse("INSTALLATION OPTIONS")}
+  (1/3) What is your project name? (e.g My Hozokit Project)`,
         default:
           projectSettings !== null &&
           typeof projectSettings.projectName !== "undefined"
@@ -40,7 +48,7 @@ module.exports = class extends Generator {
       {
         type: "confirm",
         name: "installWordpress",
-        message: "Would you like Wordpress to be installed?",
+        message: "(2/3) Would you like Wordpress to be installed?",
         default:
           projectSettings !== null &&
           typeof projectSettings.installWordpress !== "undefined"
@@ -50,8 +58,8 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "webserverURL",
-        message: `What's the address of the webserver for this install? e.g http://localhost:3000:
-(This is used to setup hot reloading. If you don't know or wouldn't like to use this feature, leave blank.)`,
+        message: `(3/3) What's the address of the webserver for this install? e.g http://localhost:3000:
+  (Used to setup hot reloading)`,
         default:
           projectSettings !== null &&
           typeof projectSettings.webserverURL !== "undefined"
@@ -61,7 +69,9 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "themeUri",
-        message: "Theme URI (a repository, a demo or showcase page):",
+        message: `
+  ${chalk.inverse("THEME CONFIGURATION")}
+  (1/5) Theme URI (a repository, a demo or showcase page):`,
         default:
           projectSettings !== null &&
           typeof projectSettings.themeUri !== "undefined"
@@ -71,7 +81,7 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "themeDescription",
-        message: "Theme description:",
+        message: "(2/5) Theme description:",
         default:
           projectSettings !== null &&
           typeof projectSettings.themeDescription !== "undefined"
@@ -81,7 +91,7 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "themeAuthor",
-        message: "Theme author (name or company):",
+        message: "(3/5) Theme author (name or company):",
         default:
           projectSettings !== null &&
           typeof projectSettings.themeAuthor !== "undefined"
@@ -91,7 +101,7 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "themeAuthorUri",
-        message: "Theme author URI (name or company):",
+        message: "(4/5) Theme author URI (name or company):",
         default:
           projectSettings !== null &&
           typeof projectSettings.themeAuthorUri !== "undefined"
@@ -102,7 +112,7 @@ module.exports = class extends Generator {
         type: "input",
         name: "themeTags",
         message:
-          "Any additional tags? (separated by a comma, useful if the theme is going to be published to wordpress.org):",
+          "(5/5) Any additional tags? (separated by a comma, useful if the theme is going to be published to wordpress.org):",
         default:
           projectSettings !== null &&
           typeof projectSettings.themeTags !== "undefined"
@@ -152,7 +162,11 @@ module.exports = class extends Generator {
           );
         })
         .then(() => {
-          this._generateFromTemplates();
+          this._generateFromTemplates()
+            // Adding last steps here makes sure they print at the end.
+            .then(() => {
+              this._printAdditionalSteps(this.props.projectFolderName);
+            });
         })
         .catch(error => {
           this.log(`${chalk.red("Error:")} Could not generate Hozokit config.`);
@@ -160,7 +174,6 @@ module.exports = class extends Generator {
         });
     } else {
       // Installs Hozokit
-      // Templates are generated in this method as well.
       this._installHozokit(this._dashify(this.props.projectFolderName))
         .then(promiseData => {
           const { projectName, hozokit } = promiseData;
@@ -173,7 +186,11 @@ module.exports = class extends Generator {
           );
         })
         .then(() => {
-          this._generateFromTemplates();
+          this._generateFromTemplates()
+            // Adding last steps here makes sure they print at the end.
+            .then(() => {
+              this._printAdditionalSteps(this.props.projectFolderName);
+            });
         })
         .catch(error => {
           this.log(`${chalk.red("Error:")} Could not generate Hozokit config.`);
@@ -474,128 +491,144 @@ module.exports = class extends Generator {
    * Generates code from templates, using user input.
    */
   _generateFromTemplates() {
-    // Starts loading spinners in the terminal. Allows user to measure progress of process.
-    const spinners = ["Setup Hozokit base files with given parameters"];
-    const m = new Multispinner(spinners);
+    return new Promise((resolve, reject) => {
+      // Starts loading spinners in the terminal. Allows user to measure progress of process.
+      const spinners = ["Setup Hozokit base files with given parameters"];
+      const m = new Multispinner(spinners);
 
-    // Used to store an error message in case something goes wrong.
-    let templateError = null;
+      // Used to store an error message in case something goes wrong.
+      let templateError = null;
 
-    // Rename the directory to match the project name.
-    const oldDirName = `./${this.props.projectFolderName}/wp-content/themes/hozokit`;
-    const newDirName = `./${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}`;
+      // Rename the directory to match the project name.
+      const oldDirName = `./${this.props.projectFolderName}/wp-content/themes/hozokit`;
+      const newDirName = `./${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}`;
 
-    // Check if the hozokit theme folder exists.
-    if (fs.existsSync(oldDirName)) {
-      try {
-        fs.renameSync(oldDirName, newDirName);
-      } catch (error) {
-        templateError = `
-        Could not rename theme folder to match project name (${this.props.projectFolderName}). \n
-        ./${error}
-        `;
-      }
-    }
-
-    // Makes sure the value of webserver is a valid string. Otherwise it renders it null so the template does not make use of it.
-    var webserverURL =
-      typeof this.props.webserverURL === "string" &&
-      this.props.webserverURL.length > 0
-        ? this.props.webserverURL
-        : null;
-
-    // The props template files will use.
-    var templateProps = { ...this.props, nodeVersion: "13.0.1", webserverURL };
-
-    // If a folder with the project name exists, create the templates.
-    // This prevents a separate folder to be created in cases where it doesn't exist.
-    if (fs.existsSync(newDirName)) {
-      // Retrieves the Node version of Hozokit and uses it in the README file.
-      const nvmrcPath = `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.nvmrc`;
-      if (fs.existsSync(nvmrcPath)) {
-        const data = fs.readFileSync(nvmrcPath, "utf8", function(error, data) {
-          if (error) {
-            templateError = `
-            Could not read ./${nvmrcPath}. \n
-            ./${error}
-            `;
-          } else {
-            return data;
-          }
-        });
-
-        if (data !== null) {
-          templateProps.nodeVersion = data.substring(1);
+      // Check if the hozokit theme folder exists.
+      if (fs.existsSync(oldDirName)) {
+        try {
+          fs.renameSync(oldDirName, newDirName);
+        } catch (error) {
+          templateError = `
+          Could not rename theme folder to match project name (${this.props.projectFolderName}). \n
+          ./${error}
+          `;
         }
       }
 
-      // Paths used in generating files from templates.
-      const filePath = {
-        baseStyles: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/styles/base.scss`,
-        env: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.env`,
-        readme: `${this.props.projectFolderName}/README.md`
+      // Makes sure the value of webserver is a valid string. Otherwise it renders it null so the template does not make use of it.
+      var webserverURL =
+        typeof this.props.webserverURL === "string" &&
+        this.props.webserverURL.length > 0
+          ? this.props.webserverURL
+          : null;
+
+      // The props template files will use.
+      var templateProps = {
+        ...this.props,
+        nodeVersion: "14.15.1",
+        webserverURL
       };
 
-      // Adds a customized base.scss which defines theme information.
-      try {
-        // Removes default base.scss.
-        fs.unlinkSync(filePath.baseStyles);
+      // If a folder with the project name exists, create the templates.
+      // This prevents a separate folder to be created in cases where it doesn't exist.
+      if (fs.existsSync(newDirName)) {
+        // Retrieves the Node version of Hozokit and uses it in the README file.
+        const nvmrcPath = `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.nvmrc`;
+        if (fs.existsSync(nvmrcPath)) {
+          const data = fs.readFileSync(nvmrcPath, "utf8", function(
+            error,
+            data
+          ) {
+            if (error) {
+              templateError = `
+              Could not read ./${nvmrcPath}. \n
+              ./${error}
+              `;
+            } else {
+              return data;
+            }
+          });
 
-        this.fs.copyTpl(
-          this.templatePath("theme/base.scss"),
-          this.destinationPath(filePath.baseStyles),
-          { ...templateProps }
-        );
-      } catch (error) {
-        templateError = `
-        Could not create './${filePath.baseStyles}'. \n
-        ./${error}
-        `;
+          if (data !== null) {
+            templateProps.nodeVersion = data.substring(1);
+          }
+        }
+
+        // Paths used in generating files from templates.
+        const filePath = {
+          baseStyles: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/styles/base.scss`,
+          env: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.env`,
+          readme: `${this.props.projectFolderName}/README.md`
+        };
+
+        // Adds a customized base.scss which defines theme information.
+        try {
+          // Removes default base.scss.
+          fs.unlinkSync(filePath.baseStyles);
+
+          this.fs.copyTpl(
+            this.templatePath("theme/base.scss"),
+            this.destinationPath(filePath.baseStyles),
+            { ...templateProps }
+          );
+        } catch (error) {
+          templateError = `
+          Could not create './${filePath.baseStyles}'. \n
+          ./${error}
+          `;
+        }
+
+        // Adds a customized .env.
+        try {
+          this.fs.copyTpl(
+            this.templatePath("theme/.env"),
+            this.destinationPath(filePath.env),
+            { ...templateProps }
+          );
+        } catch (error) {
+          templateError = `
+          Could not create './${filePath.env}'. \n
+          ./${error}
+          `;
+        }
+
+        // Rename the README file and make use of template to generate one for the project.
+        // Rename the directory to match the project name.
+        const oldReadmeName = `./${this.props.projectFolderName}/README.md`;
+        const newReadmeName = `./${this.props.projectFolderName}/HOZOKIT-README.md`;
+
+        try {
+          // Renames Hozokit's README.
+          fs.renameSync(oldReadmeName, newReadmeName);
+
+          this.fs.copyTpl(
+            this.templatePath("theme/README.md"),
+            this.destinationPath(filePath.readme),
+            { ...templateProps }
+          );
+        } catch (error) {
+          templateError = `
+          Could not rename theme README file. \n
+          ./${error}
+          `;
+        }
       }
 
-      // Adds a customized .env.
-      try {
-        this.fs.copyTpl(
-          this.templatePath("theme/.env"),
-          this.destinationPath(filePath.env),
-          { ...templateProps }
-        );
-      } catch (error) {
-        templateError = `
-        Could not create './${filePath.env}'. \n
-        ./${error}
-        `;
+      // Temporary error logging.
+      if (templateError === null) {
+        m.success(spinners[0]);
+      } else {
+        m.error(spinners[0]);
       }
 
-      // Rename the README file and make use of template to generate one for the project.
-      // Rename the directory to match the project name.
-      const oldReadmeName = `./${this.props.projectFolderName}/README.md`;
-      const newReadmeName = `./${this.props.projectFolderName}/HOZOKIT-README.md`;
+      m.on("success", () => {
+        resolve();
+      }).on("err", () => {
+        this.log(`${chalk.red("Error:")} ${templateError}`);
 
-      try {
-        // Renames Hozokit's README.
-        fs.renameSync(oldReadmeName, newReadmeName);
-
-        this.fs.copyTpl(
-          this.templatePath("theme/README.md"),
-          this.destinationPath(filePath.readme),
-          { ...templateProps }
-        );
-      } catch (error) {
-        templateError = `
-        Could not rename theme README file. \n
-        ./${error}
-        `;
-      }
-    }
-
-    // Temporary error logging.
-    if (templateError === null) {
-      m.success(spinners[0]);
-    } else {
-      this.log(`${chalk.red("Error:")} ${templateError}`);
-      m.error(spinners[0]);
-    }
+        reject(templateError);
+      });
+    });
   }
 
   /**
@@ -627,6 +660,50 @@ module.exports = class extends Generator {
   _dashify(value, target = " ", separator = "-") {
     const lowerCaseValue = value.toLowerCase();
     return lowerCaseValue.split(target).join(separator);
+  }
+
+  _printAdditionalSteps(projectFolderName) {
+    return new Promise((resolve, reject) => {
+      let nodeVersion = "14.15.1";
+
+      // Retrives node version if available.
+      const nvmrcPath = `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.nvmrc`;
+      if (fs.existsSync(nvmrcPath)) {
+        const data = fs.readFileSync(nvmrcPath, "utf8", function(error, data) {
+          if (error) {
+            const nodeVersionError = `
+            Could not read ./${nvmrcPath}. \n
+            ./${error}
+            `;
+            reject(nodeVersionError);
+          } else {
+            return data;
+          }
+        });
+
+        if (data !== null) {
+          nodeVersion = data.substring(1);
+        }
+      }
+
+      this.log(`
+      ${chalk.inverse("NEXT STEPS")}
+      Follow these steps in order to complete your setup:`);
+
+      this.log(`
+      1. Setup a php server and create a mySQL database for Wordpress.
+        See https://wordpress.org/support/article/how-to-install-wordpress/ to learn more.`);
+      this.log(`
+      2. Install Hozokit Node dependencies for your theme.
+        2.1 Navigate to wp-content/themes/${projectFolderName}
+        2.2 Check you are using Node version ${nodeVersion} by running node --version
+        2.3 Run npm install`);
+      this.log(`
+      3. For more details, checkout Hozokit's setup guide and documentation available at
+      https://github.com/csalmeida/hozokit`);
+
+      resolve();
+    });
   }
 
   // Install() {
