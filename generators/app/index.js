@@ -14,6 +14,9 @@ const fse = require("fs-extra");
 // Used to convey loading states in the terminal (loading, downloading...)
 const Multispinner = require("multispinner");
 
+// Used to install dependencies when downloads and extractions are done.
+const childProcess = require("child_process");
+
 module.exports = class extends Generator {
   prompting() {
     // Have Yeoman greet the user.
@@ -23,9 +26,19 @@ module.exports = class extends Generator {
 
     // Initial instructions.
     this.log(
-      `This generator will create a directory and install Hozokit and, optionally, a copy of Wordpress.`
+      `
+  ${chalk.inverse("USAGE INSTRUCTIONS")}
+  This generator will create a directory and install Hozokit and (optionally) a copy of Wordpress.
+
+  A few questions are asked to help configuring the theme and setup your local environment.
+  At the end it will try to install any outstanding dependencies.
+
+  If the installation fails please follow the NEXT STEPS section at the end or refer to Hozokit's setup guide:
+  https://github.com/csalmeida/hozokit#manual-install`
     );
-    this.log(`All fields are optional and defaults are shown in brackets.`);
+
+    this.log(`
+  All fields are optional and defaults are shown in brackets.`);
 
     // Retrieves previous user choices of project settings.
     const projectSettings = this.config.get("projectSettings")
@@ -37,6 +50,7 @@ module.exports = class extends Generator {
         type: "input",
         name: "projectName",
         message: `
+  
   ${chalk.inverse("INSTALLATION OPTIONS")}
   (1/3) What is your project name? (e.g My Hozokit Project)`,
         default:
@@ -127,7 +141,7 @@ module.exports = class extends Generator {
       // Makes the project folder name available to templates.
       this.props.projectFolderName = this._dashify(this.props.projectName);
       // Prepares additional tags to be appended to base.scss.
-      this.props.themeTags = `, ${this.props.themeTags}`;
+      this.props.themeTags = `${this.props.themeTags}`;
 
       // Saves user configuration so that they're used as defaults in the future.
       this.config.set("projectSettings", this.props);
@@ -162,14 +176,15 @@ module.exports = class extends Generator {
           );
         })
         .then(() => {
-          this._generateFromTemplates()
-            // Adding last steps here makes sure they print at the end.
-            .then(() => {
-              this._printAdditionalSteps(this.props.projectFolderName);
-            });
+          return this._generateFromTemplates();
+        })
+        .then(() => {
+          return this._installHozokitDependencies(this.props.projectFolderName);
+        })
+        .then(() => {
+          return this._printAdditionalSteps(this.props.projectFolderName);
         })
         .catch(error => {
-          this.log(`${chalk.red("Error:")} Could not generate Hozokit config.`);
           this.log(error);
         });
     } else {
@@ -186,17 +201,23 @@ module.exports = class extends Generator {
           );
         })
         .then(() => {
-          this._generateFromTemplates()
-            // Adding last steps here makes sure they print at the end.
-            .then(() => {
-              this._printAdditionalSteps(this.props.projectFolderName);
-            });
+          return this._generateFromTemplates();
+        })
+        .then(() => {
+          return this._installHozokitDependencies(this.props.projectFolderName);
+        })
+        .then(() => {
+          return this._printAdditionalSteps(this.props.projectFolderName);
         })
         .catch(error => {
-          this.log(`${chalk.red("Error:")} Could not generate Hozokit config.`);
           this.log(error);
         });
     }
+  }
+
+  // Installs Hozokit dependencies if a compatible version of Node is detected.
+  install() {
+    // This is done in writting() to allow downloads to finish before trying to install dependencies.
   }
 
   /**
@@ -662,8 +683,15 @@ module.exports = class extends Generator {
     return lowerCaseValue.split(target).join(separator);
   }
 
+  /**
+   * Prints additional steps the user has to take in order to configure a Hozokit build.
+   * Runs after downloading Hozokit and/or Wordpress and trying to install dependencies.
+   * require the project root folder to be in place before a task is performed.
+   * @param {String} projectFolderName Name of the project folder, used in paths and outputs for the user benefit. e.g 'hozokit' or this.props.projectFolderName
+   */
   _printAdditionalSteps(projectFolderName) {
     return new Promise((resolve, reject) => {
+      // Default node version if none is found.
       let nodeVersion = "14.15.1";
 
       // Retrives node version if available.
@@ -687,26 +715,122 @@ module.exports = class extends Generator {
       }
 
       this.log(`
-      ${chalk.inverse("NEXT STEPS")}
-      Follow these steps in order to complete your setup:`);
+${chalk.inverse("NEXT STEPS")}
+Follow these steps in order to complete your setup:`);
 
       this.log(`
-      1. Setup a php server and create a mySQL database for Wordpress.
-        See https://wordpress.org/support/article/how-to-install-wordpress/ to learn more.`);
+1. Setup a webserver cabable of running php and create a mySQL database for Wordpress.
+  See https://wordpress.org/support/article/how-to-install-wordpress/ to learn more.`);
       this.log(`
-      2. Install Hozokit Node dependencies for your theme.
-        2.1 Navigate to wp-content/themes/${projectFolderName}
-        2.2 Check you are using Node version ${nodeVersion} by running node --version
-        2.3 Run npm install`);
+2. Install Hozokit Node dependencies for your theme. (required if the Installing dependencies step has not been sucessful)
+  2.1 Change directory to wp-content/themes/${projectFolderName}
+  2.2 Check you are using Node version ${nodeVersion} by running node --version
+  2.3 Run npm install`);
       this.log(`
-      3. For more details, checkout Hozokit's setup guide and documentation available at
-      https://github.com/csalmeida/hozokit`);
+3. To start development run npm start`);
+      this.log(`
+👋 For more details, checkout Hozokit's setup guide and documentation available at
+https://github.com/csalmeida/hozokit
+      `);
 
       resolve();
     });
   }
 
-  // Install() {
-  //   this.installDependencies();
-  // }
+  /**
+   * Attemps to install Hozokit's Node dependencies.
+   * Starts by looking for an .nvmrc file to retrieve expected version then
+   * attempts to run npm install if expected version is set.
+   * Otherwise, it will error out and give further instructions.
+   * @param {String} projectFolderName Name of the project folder, used in paths and outputs for the user benefit. e.g 'hozokit' or this.props.projectFolderName
+   */
+  _installHozokitDependencies(projectFolderName) {
+    return new Promise((resolve, reject) => {
+      // Starts a new spinner.
+      const spinners = ["Installing dependencies (please wait a moment)"];
+      const m = new Multispinner(spinners);
+
+      const directory = `./${projectFolderName}/wp-content/themes/${projectFolderName}`;
+      let nodeVersion = process.version;
+      let nodeVersionError = null;
+      let nodeVersionWarning = null;
+
+      // Retrives node version from the theme folder.
+      // Used to determine which version of Node Hozokit currently uses.
+      const nvmrcPath = `${projectFolderName}/wp-content/themes/${projectFolderName}/.nvmrc`;
+      if (fs.existsSync(nvmrcPath)) {
+        const data = fs.readFileSync(nvmrcPath, "utf8", function(error, data) {
+          if (error) {
+            nodeVersionError = `
+            
+Could not read ./${nvmrcPath}. \n
+./${error}
+            `;
+          } else {
+            return data;
+          }
+        });
+
+        // Installs dependencies if the expected version of Node is present.
+        if (data !== null && data === nodeVersion) {
+          process.chdir(directory);
+          // Cannot use this.installDependencies({ bower: false, npm: true });
+          // As it does not run as expected sometimes. It might be because other operations have not finished.
+          // Running npm directly instead.
+          try {
+            // Runs npm install with no logging to the terminal. This allows the use of the spinner.
+            childProcess.execSync("npm install", { stdio: undefined });
+          } catch (error) {
+            nodeVersionError = `
+${chalk.red("Error:")}
+Could not install dependencies via npm:
+${error}
+            `;
+
+            m.error(spinners[0]);
+          }
+        } else {
+          // User is informed that version is not compatible and they will have to install dependencies themselves.
+          nodeVersionWarning = `
+
+${chalk.yellow("Warning:")}
+Avoided dependency install because current Node version is ${nodeVersion}.
+Please set Node to ${data}, change directory to ${directory} and run ${chalk.inverse(
+            "npm install"
+          )}
+Alternatively, attempt to install dependencies with your current version following the steps above but keeping Node ${nodeVersion} set.
+`;
+        }
+      }
+
+      // Sets symbols and text color to signal a warning instead of success.
+      if (nodeVersionWarning) {
+        m.symbol = {
+          ...m.symbol,
+          success: m.symbol.error
+        };
+
+        m.color = {
+          success: "yellow"
+        };
+      }
+
+      if (nodeVersionError === null) {
+        m.success(spinners[0]);
+      } else {
+        m.error(spinners[0]);
+      }
+
+      m.on("success", () => {
+        // A warning is printed if any available.
+        if (nodeVersionWarning) {
+          this.log(nodeVersionWarning);
+        }
+
+        resolve();
+      }).on("err", () => {
+        reject(nodeVersionError);
+      });
+    });
+  } // End of _installHozokitDependencies
 };
