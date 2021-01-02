@@ -723,7 +723,7 @@ Follow these steps in order to complete your setup:`);
   See https://wordpress.org/support/article/how-to-install-wordpress/ to learn more.`);
       this.log(`
 2. Install Hozokit Node dependencies for your theme. (required if the Installing dependencies step has not been sucessful)
-  2.1 Change directory to wp-content/themes/${projectFolderName}
+  2.1 Change directory to ${projectFolderName}/wp-content/themes/${projectFolderName}
   2.2 Check you are using Node version ${nodeVersion} by running node --version
   2.3 Run npm install`);
       this.log(`
