@@ -14,12 +14,31 @@ const fse = require("fs-extra");
 // Used to convey loading states in the terminal (loading, downloading...)
 const Multispinner = require("multispinner");
 
+// Used to install dependencies when downloads and extractions are done.
+const childProcess = require("child_process");
+
 module.exports = class extends Generator {
   prompting() {
     // Have Yeoman greet the user.
     this.log(
       yosay(`The ${chalk.blue("Hozokit")} theme generator for Wordpress.`)
     );
+
+    // Initial instructions.
+    this.log(
+      `
+  ${chalk.inverse("USAGE INSTRUCTIONS")}
+  This generator will create a directory and install Hozokit and (optionally) a copy of Wordpress.
+
+  A few questions are asked to help configuring the theme and setup your local environment.
+  At the end it will try to install any outstanding dependencies.
+
+  If the installation fails please follow the NEXT STEPS section at the end or refer to Hozokit's setup guide:
+  https://github.com/csalmeida/hozokit#manual-install`
+    );
+
+    this.log(`
+  All fields are optional and defaults are shown in brackets.`);
 
     // Retrieves previous user choices of project settings.
     const projectSettings = this.config.get("projectSettings")
@@ -30,7 +49,10 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "projectName",
-        message: "What is your project name? (e.g My Hozokit Project)",
+        message: `
+  
+  ${chalk.inverse("INSTALLATION OPTIONS")}
+  (1/3) What is your project name? (e.g My Hozokit Project)`,
         default:
           projectSettings !== null &&
           typeof projectSettings.projectName !== "undefined"
@@ -40,7 +62,7 @@ module.exports = class extends Generator {
       {
         type: "confirm",
         name: "installWordpress",
-        message: "Would you like Wordpress to be installed?",
+        message: "(2/3) Would you like Wordpress to be installed?",
         default:
           projectSettings !== null &&
           typeof projectSettings.installWordpress !== "undefined"
@@ -50,8 +72,8 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "webserverURL",
-        message: `What's the address of the webserver for this install? e.g http://localhost:3000:
-(This is used to setup hot reloading. If you don't know or wouldn't like to use this feature, leave blank.)`,
+        message: `(3/3) What's the address of the webserver for this install? e.g http://localhost:3000:
+  (Used to setup hot reloading)`,
         default:
           projectSettings !== null &&
           typeof projectSettings.webserverURL !== "undefined"
@@ -61,7 +83,9 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "themeUri",
-        message: "Theme URI (a repository, a demo or showcase page):",
+        message: `
+  ${chalk.inverse("THEME CONFIGURATION")}
+  (1/5) Theme URI (a repository, a demo or showcase page):`,
         default:
           projectSettings !== null &&
           typeof projectSettings.themeUri !== "undefined"
@@ -71,7 +95,7 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "themeDescription",
-        message: "Theme description:",
+        message: "(2/5) Theme description:",
         default:
           projectSettings !== null &&
           typeof projectSettings.themeDescription !== "undefined"
@@ -81,7 +105,7 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "themeAuthor",
-        message: "Theme author (name or company):",
+        message: "(3/5) Theme author (name or company):",
         default:
           projectSettings !== null &&
           typeof projectSettings.themeAuthor !== "undefined"
@@ -91,7 +115,7 @@ module.exports = class extends Generator {
       {
         type: "input",
         name: "themeAuthorUri",
-        message: "Theme author URI (name or company):",
+        message: "(4/5) Theme author URI (name or company):",
         default:
           projectSettings !== null &&
           typeof projectSettings.themeAuthorUri !== "undefined"
@@ -102,7 +126,7 @@ module.exports = class extends Generator {
         type: "input",
         name: "themeTags",
         message:
-          "Any additional tags? (separated by a comma, useful if the theme is going to be published to wordpress.org):",
+          "(5/5) Any additional tags? (separated by a comma, useful if the theme is going to be published to wordpress.org):",
         default:
           projectSettings !== null &&
           typeof projectSettings.themeTags !== "undefined"
@@ -117,7 +141,7 @@ module.exports = class extends Generator {
       // Makes the project folder name available to templates.
       this.props.projectFolderName = this._dashify(this.props.projectName);
       // Prepares additional tags to be appended to base.scss.
-      this.props.themeTags = `, ${this.props.themeTags}`;
+      this.props.themeTags = `${this.props.themeTags}`;
 
       // Saves user configuration so that they're used as defaults in the future.
       this.config.set("projectSettings", this.props);
@@ -152,15 +176,19 @@ module.exports = class extends Generator {
           );
         })
         .then(() => {
-          this._generateFromTemplates();
+          return this._generateFromTemplates();
+        })
+        .then(() => {
+          return this._installHozokitDependencies(this.props.projectFolderName);
+        })
+        .then(() => {
+          return this._printAdditionalSteps(this.props.projectFolderName);
         })
         .catch(error => {
-          this.log(`${chalk.red("Error:")} Could not generate Hozokit config.`);
           this.log(error);
         });
     } else {
       // Installs Hozokit
-      // Templates are generated in this method as well.
       this._installHozokit(this._dashify(this.props.projectFolderName))
         .then(promiseData => {
           const { projectName, hozokit } = promiseData;
@@ -173,13 +201,23 @@ module.exports = class extends Generator {
           );
         })
         .then(() => {
-          this._generateFromTemplates();
+          return this._generateFromTemplates();
+        })
+        .then(() => {
+          return this._installHozokitDependencies(this.props.projectFolderName);
+        })
+        .then(() => {
+          return this._printAdditionalSteps(this.props.projectFolderName);
         })
         .catch(error => {
-          this.log(`${chalk.red("Error:")} Could not generate Hozokit config.`);
           this.log(error);
         });
     }
+  }
+
+  // Installs Hozokit dependencies if a compatible version of Node is detected.
+  install() {
+    // This is done in writting() to allow downloads to finish before trying to install dependencies.
   }
 
   /**
@@ -474,128 +512,144 @@ module.exports = class extends Generator {
    * Generates code from templates, using user input.
    */
   _generateFromTemplates() {
-    // Starts loading spinners in the terminal. Allows user to measure progress of process.
-    const spinners = ["Setup Hozokit base files with given parameters"];
-    const m = new Multispinner(spinners);
+    return new Promise((resolve, reject) => {
+      // Starts loading spinners in the terminal. Allows user to measure progress of process.
+      const spinners = ["Setup Hozokit base files with given parameters"];
+      const m = new Multispinner(spinners);
 
-    // Used to store an error message in case something goes wrong.
-    let templateError = null;
+      // Used to store an error message in case something goes wrong.
+      let templateError = null;
 
-    // Rename the directory to match the project name.
-    const oldDirName = `./${this.props.projectFolderName}/wp-content/themes/hozokit`;
-    const newDirName = `./${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}`;
+      // Rename the directory to match the project name.
+      const oldDirName = `./${this.props.projectFolderName}/wp-content/themes/hozokit`;
+      const newDirName = `./${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}`;
 
-    // Check if the hozokit theme folder exists.
-    if (fs.existsSync(oldDirName)) {
-      try {
-        fs.renameSync(oldDirName, newDirName);
-      } catch (error) {
-        templateError = `
-        Could not rename theme folder to match project name (${this.props.projectFolderName}). \n
-        ./${error}
-        `;
-      }
-    }
-
-    // Makes sure the value of webserver is a valid string. Otherwise it renders it null so the template does not make use of it.
-    var webserverURL =
-      typeof this.props.webserverURL === "string" &&
-      this.props.webserverURL.length > 0
-        ? this.props.webserverURL
-        : null;
-
-    // The props template files will use.
-    var templateProps = { ...this.props, nodeVersion: "13.0.1", webserverURL };
-
-    // If a folder with the project name exists, create the templates.
-    // This prevents a separate folder to be created in cases where it doesn't exist.
-    if (fs.existsSync(newDirName)) {
-      // Retrieves the Node version of Hozokit and uses it in the README file.
-      const nvmrcPath = `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.nvmrc`;
-      if (fs.existsSync(nvmrcPath)) {
-        const data = fs.readFileSync(nvmrcPath, "utf8", function(error, data) {
-          if (error) {
-            templateError = `
-            Could not read ./${nvmrcPath}. \n
-            ./${error}
-            `;
-          } else {
-            return data;
-          }
-        });
-
-        if (data !== null) {
-          templateProps.nodeVersion = data.substring(1);
+      // Check if the hozokit theme folder exists.
+      if (fs.existsSync(oldDirName)) {
+        try {
+          fs.renameSync(oldDirName, newDirName);
+        } catch (error) {
+          templateError = `
+          Could not rename theme folder to match project name (${this.props.projectFolderName}). \n
+          ./${error}
+          `;
         }
       }
 
-      // Paths used in generating files from templates.
-      const filePath = {
-        baseStyles: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/styles/base.scss`,
-        env: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.env`,
-        readme: `${this.props.projectFolderName}/README.md`
+      // Makes sure the value of webserver is a valid string. Otherwise it renders it null so the template does not make use of it.
+      var webserverURL =
+        typeof this.props.webserverURL === "string" &&
+        this.props.webserverURL.length > 0
+          ? this.props.webserverURL
+          : null;
+
+      // The props template files will use.
+      var templateProps = {
+        ...this.props,
+        nodeVersion: "14.15.1",
+        webserverURL
       };
 
-      // Adds a customized base.scss which defines theme information.
-      try {
-        // Removes default base.scss.
-        fs.unlinkSync(filePath.baseStyles);
+      // If a folder with the project name exists, create the templates.
+      // This prevents a separate folder to be created in cases where it doesn't exist.
+      if (fs.existsSync(newDirName)) {
+        // Retrieves the Node version of Hozokit and uses it in the README file.
+        const nvmrcPath = `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.nvmrc`;
+        if (fs.existsSync(nvmrcPath)) {
+          const data = fs.readFileSync(nvmrcPath, "utf8", function(
+            error,
+            data
+          ) {
+            if (error) {
+              templateError = `
+              Could not read ./${nvmrcPath}. \n
+              ./${error}
+              `;
+            } else {
+              return data;
+            }
+          });
 
-        this.fs.copyTpl(
-          this.templatePath("theme/base.scss"),
-          this.destinationPath(filePath.baseStyles),
-          { ...templateProps }
-        );
-      } catch (error) {
-        templateError = `
-        Could not create './${filePath.baseStyles}'. \n
-        ./${error}
-        `;
+          if (data !== null) {
+            templateProps.nodeVersion = data.substring(1);
+          }
+        }
+
+        // Paths used in generating files from templates.
+        const filePath = {
+          baseStyles: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/styles/base.scss`,
+          env: `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.env`,
+          readme: `${this.props.projectFolderName}/README.md`
+        };
+
+        // Adds a customized base.scss which defines theme information.
+        try {
+          // Removes default base.scss.
+          fs.unlinkSync(filePath.baseStyles);
+
+          this.fs.copyTpl(
+            this.templatePath("theme/base.scss"),
+            this.destinationPath(filePath.baseStyles),
+            { ...templateProps }
+          );
+        } catch (error) {
+          templateError = `
+          Could not create './${filePath.baseStyles}'. \n
+          ./${error}
+          `;
+        }
+
+        // Adds a customized .env.
+        try {
+          this.fs.copyTpl(
+            this.templatePath("theme/.env"),
+            this.destinationPath(filePath.env),
+            { ...templateProps }
+          );
+        } catch (error) {
+          templateError = `
+          Could not create './${filePath.env}'. \n
+          ./${error}
+          `;
+        }
+
+        // Rename the README file and make use of template to generate one for the project.
+        // Rename the directory to match the project name.
+        const oldReadmeName = `./${this.props.projectFolderName}/README.md`;
+        const newReadmeName = `./${this.props.projectFolderName}/HOZOKIT-README.md`;
+
+        try {
+          // Renames Hozokit's README.
+          fs.renameSync(oldReadmeName, newReadmeName);
+
+          this.fs.copyTpl(
+            this.templatePath("theme/README.md"),
+            this.destinationPath(filePath.readme),
+            { ...templateProps }
+          );
+        } catch (error) {
+          templateError = `
+          Could not rename theme README file. \n
+          ./${error}
+          `;
+        }
       }
 
-      // Adds a customized .env.
-      try {
-        this.fs.copyTpl(
-          this.templatePath("theme/.env"),
-          this.destinationPath(filePath.env),
-          { ...templateProps }
-        );
-      } catch (error) {
-        templateError = `
-        Could not create './${filePath.env}'. \n
-        ./${error}
-        `;
+      // Temporary error logging.
+      if (templateError === null) {
+        m.success(spinners[0]);
+      } else {
+        m.error(spinners[0]);
       }
 
-      // Rename the README file and make use of template to generate one for the project.
-      // Rename the directory to match the project name.
-      const oldReadmeName = `./${this.props.projectFolderName}/README.md`;
-      const newReadmeName = `./${this.props.projectFolderName}/HOZOKIT-README.md`;
+      m.on("success", () => {
+        resolve();
+      }).on("err", () => {
+        this.log(`${chalk.red("Error:")} ${templateError}`);
 
-      try {
-        // Renames Hozokit's README.
-        fs.renameSync(oldReadmeName, newReadmeName);
-
-        this.fs.copyTpl(
-          this.templatePath("theme/README.md"),
-          this.destinationPath(filePath.readme),
-          { ...templateProps }
-        );
-      } catch (error) {
-        templateError = `
-        Could not rename theme README file. \n
-        ./${error}
-        `;
-      }
-    }
-
-    // Temporary error logging.
-    if (templateError === null) {
-      m.success(spinners[0]);
-    } else {
-      this.log(`${chalk.red("Error:")} ${templateError}`);
-      m.error(spinners[0]);
-    }
+        reject(templateError);
+      });
+    });
   }
 
   /**
@@ -629,7 +683,154 @@ module.exports = class extends Generator {
     return lowerCaseValue.split(target).join(separator);
   }
 
-  // Install() {
-  //   this.installDependencies();
-  // }
+  /**
+   * Prints additional steps the user has to take in order to configure a Hozokit build.
+   * Runs after downloading Hozokit and/or Wordpress and trying to install dependencies.
+   * require the project root folder to be in place before a task is performed.
+   * @param {String} projectFolderName Name of the project folder, used in paths and outputs for the user benefit. e.g 'hozokit' or this.props.projectFolderName
+   */
+  _printAdditionalSteps(projectFolderName) {
+    return new Promise((resolve, reject) => {
+      // Default node version if none is found.
+      let nodeVersion = "14.15.1";
+
+      // Retrives node version if available.
+      const nvmrcPath = `${this.props.projectFolderName}/wp-content/themes/${this.props.projectFolderName}/.nvmrc`;
+      if (fs.existsSync(nvmrcPath)) {
+        const data = fs.readFileSync(nvmrcPath, "utf8", function(error, data) {
+          if (error) {
+            const nodeVersionError = `
+            Could not read ./${nvmrcPath}. \n
+            ./${error}
+            `;
+            reject(nodeVersionError);
+          } else {
+            return data;
+          }
+        });
+
+        if (data !== null) {
+          nodeVersion = data.substring(1);
+        }
+      }
+
+      this.log(`
+${chalk.inverse("NEXT STEPS")}
+Follow these steps in order to complete your setup:`);
+
+      this.log(`
+1. Setup a webserver cabable of running php and create a mySQL database for Wordpress.
+  See https://wordpress.org/support/article/how-to-install-wordpress/ to learn more.`);
+      this.log(`
+2. Install Hozokit Node dependencies for your theme. (required if the Installing dependencies step has not been sucessful)
+  2.1 Change directory to wp-content/themes/${projectFolderName}
+  2.2 Check you are using Node version ${nodeVersion} by running node --version
+  2.3 Run npm install`);
+      this.log(`
+3. To start development run npm start`);
+      this.log(`
+👋 For more details, checkout Hozokit's setup guide and documentation available at
+https://github.com/csalmeida/hozokit
+      `);
+
+      resolve();
+    });
+  }
+
+  /**
+   * Attemps to install Hozokit's Node dependencies.
+   * Starts by looking for an .nvmrc file to retrieve expected version then
+   * attempts to run npm install if expected version is set.
+   * Otherwise, it will error out and give further instructions.
+   * @param {String} projectFolderName Name of the project folder, used in paths and outputs for the user benefit. e.g 'hozokit' or this.props.projectFolderName
+   */
+  _installHozokitDependencies(projectFolderName) {
+    return new Promise((resolve, reject) => {
+      // Starts a new spinner.
+      const spinners = ["Installing dependencies (please wait a moment)"];
+      const m = new Multispinner(spinners);
+
+      const directory = `./${projectFolderName}/wp-content/themes/${projectFolderName}`;
+      let nodeVersion = process.version;
+      let nodeVersionError = null;
+      let nodeVersionWarning = null;
+
+      // Retrives node version from the theme folder.
+      // Used to determine which version of Node Hozokit currently uses.
+      const nvmrcPath = `${projectFolderName}/wp-content/themes/${projectFolderName}/.nvmrc`;
+      if (fs.existsSync(nvmrcPath)) {
+        const data = fs.readFileSync(nvmrcPath, "utf8", function(error, data) {
+          if (error) {
+            nodeVersionError = `
+            
+Could not read ./${nvmrcPath}. \n
+./${error}
+            `;
+          } else {
+            return data;
+          }
+        });
+
+        // Installs dependencies if the expected version of Node is present.
+        if (data !== null && data === nodeVersion) {
+          process.chdir(directory);
+          // Cannot use this.installDependencies({ bower: false, npm: true });
+          // As it does not run as expected sometimes. It might be because other operations have not finished.
+          // Running npm directly instead.
+          try {
+            // Runs npm install with no logging to the terminal. This allows the use of the spinner.
+            childProcess.execSync("npm install", { stdio: undefined });
+          } catch (error) {
+            nodeVersionError = `
+${chalk.red("Error:")}
+Could not install dependencies via npm:
+${error}
+            `;
+
+            m.error(spinners[0]);
+          }
+        } else {
+          // User is informed that version is not compatible and they will have to install dependencies themselves.
+          nodeVersionWarning = `
+
+${chalk.yellow("Warning:")}
+Avoided dependency install because current Node version is ${nodeVersion}.
+Please set Node to ${data}, change directory to ${directory} and run ${chalk.inverse(
+            "npm install"
+          )}
+Alternatively, attempt to install dependencies with your current version following the steps above but keeping Node ${nodeVersion} set.
+`;
+        }
+      }
+
+      // Sets symbols and text color to signal a warning instead of success.
+      if (nodeVersionWarning) {
+        m.symbol = {
+          ...m.symbol,
+          success: m.symbol.error
+        };
+
+        m.color = {
+          success: "yellow"
+        };
+      }
+
+      if (nodeVersionError === null) {
+        m.success(spinners[0]);
+      } else {
+        m.error(spinners[0]);
+      }
+
+      m.on("success", () => {
+        // A warning is printed if any available.
+        if (nodeVersionWarning) {
+          this.log(nodeVersionWarning);
+        }
+
+        resolve();
+      }).on("err", () => {
+        reject(nodeVersionError);
+      });
+    });
+  } // End of _installHozokitDependencies
 };
