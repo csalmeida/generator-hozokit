@@ -21,24 +21,19 @@ module.exports = class extends Generator {
   prompting() {
     // Have Yeoman greet the user.
     this.log(
-      yosay(`The ${chalk.blue("Hozokit")} theme generator for Wordpress.`)
+      yosay(`The ${chalk.blue("Hozokit")} theme generator for WordPress.`)
     );
 
     // Initial instructions.
     this.log(
       `
-  ${chalk.inverse("USAGE INSTRUCTIONS")}
-  This generator will create a directory and install Hozokit and (optionally) a copy of Wordpress.
+  ${chalk.inverse("WELCOME!")}
+  This generator will ask EIGHT questions in total, before installation.
+  All fields are optional and defaults are shown in brackets.
 
-  A few questions are asked to help configuring the theme and setup your local environment.
-  At the end it will try to install any outstanding dependencies.
-
-  If the installation fails please follow the NEXT STEPS section at the end or refer to Hozokit's setup guide:
+  If the installation fails please refer to Hozokit's setup guide:
   https://github.com/csalmeida/hozokit#manual-install`
     );
-
-    this.log(`
-  All fields are optional and defaults are shown in brackets.`);
 
     // Retrieves previous user choices of project settings.
     const projectSettings = this.config.get("projectSettings")
@@ -62,7 +57,7 @@ module.exports = class extends Generator {
       {
         type: "confirm",
         name: "installWordpress",
-        message: "(2/3) Would you like Wordpress to be installed?",
+        message: "(2/3) Would you like WordPress to be installed?",
         default:
           projectSettings !== null &&
           typeof projectSettings.installWordpress !== "undefined"
@@ -157,7 +152,7 @@ module.exports = class extends Generator {
             projectName,
             "wordpress.zip",
             `./${projectName}/`,
-            "Extracting Wordpress"
+            "Extracting WordPress"
           );
         })
         .then(() => {
@@ -181,8 +176,11 @@ module.exports = class extends Generator {
         .then(() => {
           return this._installHozokitDependencies(this.props.projectFolderName);
         })
-        .then(() => {
-          return this._printAdditionalSteps(this.props.projectFolderName);
+        .then(dependenciesInstalled => {
+          return this._printAdditionalSteps(
+            this.props.projectFolderName,
+            dependenciesInstalled
+          );
         })
         .catch(error => {
           this.log(error);
@@ -206,8 +204,11 @@ module.exports = class extends Generator {
         .then(() => {
           return this._installHozokitDependencies(this.props.projectFolderName);
         })
-        .then(() => {
-          return this._printAdditionalSteps(this.props.projectFolderName);
+        .then(dependenciesInstalled => {
+          return this._printAdditionalSteps(
+            this.props.projectFolderName,
+            dependenciesInstalled
+          );
         })
         .catch(error => {
           this.log(error);
@@ -221,7 +222,7 @@ module.exports = class extends Generator {
   }
 
   /**
-   * Downloads and installs the latest version of Wordpress in the project root directory.
+   * Downloads and installs the latest version of WordPress in the project root directory.
    * This functionality should be optional and a Hozokit project should still be able to be generated whether or not this function runs.
    * @param {String} projectName Name of the project, used to name root folder. e.g 'hozokit' or this.props.projectName
    */
@@ -231,10 +232,10 @@ module.exports = class extends Generator {
       this._createProjectDirectory(projectName);
 
       // Starts loading spinners in the terminal. Allows user to measure progress of process.
-      const spinners = ["Downloading Wordpress"];
+      const spinners = ["Downloading WordPress"];
       const m = new Multispinner(spinners);
 
-      // Downloads a zipped copy of Wordpress into the folder.
+      // Downloads a zipped copy of WordPress into the folder.
       const zipPath = `./${projectName}/wordpress.zip`;
       const file = fs.createWriteStream(zipPath);
       const downloadURL = "https://wordpress.org/latest.zip";
@@ -296,7 +297,7 @@ module.exports = class extends Generator {
       ];
       const m = new Multispinner(spinners);
 
-      // Downloads a zipped copy of Wordpress into the folder.
+      // Downloads a zipped copy of WordPress into the folder.
       const zipPath = `./${projectName}/hozokit-main.zip`;
       const file = fs.createWriteStream(zipPath);
       // Getting data on the URL is necessary to be passed into the request options.
@@ -397,7 +398,7 @@ module.exports = class extends Generator {
   /**
    * Extracts zip archives into a folder and moves them to a desired location.
    * Original zip and created folder are removed after uncompressing.
-   * Used when installing Wordpress and Hozokit.
+   * Used when installing WordPress and Hozokit.
    * @param {String} projectName Name of the project, used to name root folder. e.g 'hozokit' or this.props.projectName
    * @param {String} fileZipName The name of the zip to be extracted. e.g 'hozokit-main.zip'
    * @param {String} copyPath (optional) The target path files should be copied to. This is a move since files are removed after extraction. Defaults to project directory. e.g './project-name'
@@ -413,7 +414,7 @@ module.exports = class extends Generator {
       const spinners = [spinnerText];
       const m = new Multispinner(spinners);
 
-      // Extracts contents of Wordpress.
+      // Extracts contents of WordPress.
       const extractPath = `./${projectName}/${fileZipName}`;
       const zip = new AdmZip(extractPath);
       // Makes use of the entries to figure out which folder name was created when file was extracted.
@@ -685,11 +686,11 @@ module.exports = class extends Generator {
 
   /**
    * Prints additional steps the user has to take in order to configure a Hozokit build.
-   * Runs after downloading Hozokit and/or Wordpress and trying to install dependencies.
+   * Runs after downloading Hozokit and/or WordPress and trying to install dependencies.
    * require the project root folder to be in place before a task is performed.
    * @param {String} projectFolderName Name of the project folder, used in paths and outputs for the user benefit. e.g 'hozokit' or this.props.projectFolderName
    */
-  _printAdditionalSteps(projectFolderName) {
+  _printAdditionalSteps(projectFolderName, dependenciesInstalled = false) {
     return new Promise((resolve, reject) => {
       // Default node version if none is found.
       let nodeVersion = "14.15.1";
@@ -716,22 +717,48 @@ module.exports = class extends Generator {
 
       this.log(`
 ${chalk.inverse("NEXT STEPS")}
-Follow these steps in order to complete your setup:`);
+Below are some helpful reminders to complete your setup.`);
 
       this.log(`
-1. Setup a webserver cabable of running php and create a mySQL database for Wordpress.
-  See https://wordpress.org/support/article/how-to-install-wordpress/ to learn more.`);
-      this.log(`
-2. Install Hozokit Node dependencies for your theme. (required if the Installing dependencies step has not been sucessful)
+1. Setup a webserver capable of running PHP and create a MySQL database for WordPress.
+   See https://wordpress.org/support/article/how-to-install-wordpress/ to learn more.`);
+
+      if (
+        typeof dependenciesInstalled === "boolean" &&
+        dependenciesInstalled === true
+      ) {
+        this.log(`
+2. Change directory to ${projectFolderName}/wp-content/themes/${projectFolderName}
+   To start development run ${chalk.inverse("npm start")}`);
+
+        this.log(`
+3. You now have the power to create Twig components instantly!
+   Change directory into your theme folder and run ${chalk.inverse(
+     "yo hozokit:component"
+   )}`);
+      } else {
+        this.log(`
+2. Install Hozokit Node dependencies for your theme.
   2.1 Change directory to ${projectFolderName}/wp-content/themes/${projectFolderName}
-  2.2 Check you are using Node version ${nodeVersion} by running node --version
-  2.3 Run npm install`);
-      this.log(`
-3. To start development run npm start`);
+  2.2 Check you are using Node version ${nodeVersion} by running ${chalk.inverse(
+          "node --version"
+        )}
+  2.3 Run ${chalk.inverse("npm install")}`);
+
+        this.log(`
+3. To start development run ${chalk.inverse("npm start")}`);
+
+        this.log(`
+4. You now have the power to create Twig components instantly!
+   Change directory into your theme folder and run ${chalk.inverse(
+     "yo hozokit:component"
+   )}`);
+      }
+
       this.log(`
 👋 For more details, checkout Hozokit's setup guide and documentation available at
 https://github.com/csalmeida/hozokit
-      `);
+              `);
 
       resolve();
     });
@@ -747,7 +774,7 @@ https://github.com/csalmeida/hozokit
   _installHozokitDependencies(projectFolderName) {
     return new Promise((resolve, reject) => {
       // Starts a new spinner.
-      const spinners = ["Installing dependencies (please wait a moment)"];
+      const spinners = ["Installing dependencies (this might take a while)"];
       const m = new Multispinner(spinners);
 
       const directory = `./${projectFolderName}/wp-content/themes/${projectFolderName}`;
@@ -822,12 +849,18 @@ Alternatively, attempt to install dependencies with your current version followi
       }
 
       m.on("success", () => {
+        // Used to determine which output next steps should use.
+        let dependenciesInstalled = true;
+
         // A warning is printed if any available.
         if (nodeVersionWarning) {
+          // The next steps output is changed is dependencies could not be installed.
+          dependenciesInstalled = false;
+          // Displays a warning to the user.
           this.log(nodeVersionWarning);
         }
 
-        resolve();
+        resolve(dependenciesInstalled);
       }).on("err", () => {
         reject(nodeVersionError);
       });
