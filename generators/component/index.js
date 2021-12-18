@@ -5,6 +5,9 @@ const chalk = require("chalk");
 const yosay = require("yosay");
 
 const fs = require("fs");
+// Current working directory is retrieved early in the process
+// because for some reason it does not include the project folder if retrieved later in writting().
+const cwd = process.cwd();
 
 module.exports = class extends Generator {
   prompting() {
@@ -63,20 +66,34 @@ module.exports = class extends Generator {
           typeof projectSettings.projectName !== "undefined"
             ? this._dashify(projectSettings.projectName)
             : null
+      },
+      {
+        type: "input",
+        name: "projectDirectory",
+        message: `Where is the theme folder located?
+  Specify which one using a relative path, if inside the WordPress installation folder, please leave blank (e.g . means ./theme-folder-name but adding a partial directory such as wordpress-themes/legacy-themes means project-directory/wordpress-themes/legacy-themes/theme-folder-name)`,
+        default:
+          componentSettings !== null &&
+          typeof componentSettings.projectDirectory !== "undefined"
+            ? componentSettings.projectDirectory
+            : null
       }
     ];
 
     return this.prompt(prompts).then(props => {
       // To access props later use this.props.someAnswer;
       this.props = props;
+
       // Makes the project folder name available to templates.
       this.props.componentNameFormatted = this._snakify(
         this.props.componentName
       );
+
       // Adds a dashed version of the name to be used in CSS class references.
       this.props.componentNameDashified = this._dashify(
         this.props.componentName
       );
+
       // Prepares additional tags to be appended to base.scss.
       this.props.componentClassPrefix = this._snakify(
         this.props.componentClassPrefix
@@ -84,14 +101,34 @@ module.exports = class extends Generator {
 
       // Saves user configuration so that they're used as defaults in the future.
       this.config.set("componentSettings", this.props);
+
+      // Saves user configuration for project settings.
+      this.config.set("projectSettings", {
+        projectName: this.props.projectFolderName,
+        ...this.props
+      });
     });
   }
 
   writing() {
     // Tries to find the project directory
-    const projectDirectory = `${process.cwd()}/${
-      this.props.projectFolderName
-    }/wp-content/themes/${this.props.projectFolderName}`;
+    // The default theme path will be the project directory and the default WordPress themes directory.
+    let projectDirectory = `${cwd}/wp-content/themes/${this.props.projectFolderName}`;
+
+    // For cases when the theme folder is in the current directory.
+    // The user can leave it blank or the current directory definition.
+    if (
+      this.props.projectDirectory &&
+      (this.props.projectDirectory === "." ||
+        this.props.projectDirectory === "./")
+    ) {
+      projectDirectory = `${cwd}/${this.props.projectFolderName}`;
+    }
+
+    // When the user overrides the default path, use it instead.
+    if (this.props.projectDirectory && this.props.projectDirectory !== "") {
+      projectDirectory = `${cwd}/${this.props.projectDirectory}/${this.props.projectFolderName}`;
+    }
 
     // Checks if the user is in the root directory project directory.
     if (fs.existsSync(projectDirectory)) {
